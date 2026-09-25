@@ -20,6 +20,7 @@ import com.kenny.tellofollow.tello.TelloTelemetry
 import com.kenny.tellofollow.tello.TelloVideoReceiver
 import com.kenny.tellofollow.tracking.DetectionResult
 import com.kenny.tellofollow.tracking.FollowMode
+import com.kenny.tellofollow.tracking.FollowStyle
 import com.kenny.tellofollow.tracking.PersonDetector
 import com.kenny.tellofollow.tracking.PidController
 import com.kenny.tellofollow.tracking.RcCommand
@@ -40,6 +41,8 @@ data class FlightUiState(
     val followEnabled: Boolean = false,
     /** Default Body; Face keeps v1 face-only tracking. */
     val followMode: FollowMode = FollowMode.BODY,
+    /** Flight personality (v2.1); orthogonal to body/face detection. */
+    val followStyle: FollowStyle = FollowStyle.CHASE,
     val recording: Boolean = false,
     val recordingWithAudio: Boolean = false,
     val statusMessage: String = "Join TELLO-xxxx Wi-Fi, then Connect",
@@ -288,6 +291,20 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         setFollowMode(next)
     }
 
+    fun setFollowStyle(style: FollowStyle) {
+        // Re-tapping Orbit flips strafe direction
+        if (style == FollowStyle.ORBIT && _ui.value.followStyle == FollowStyle.ORBIT) {
+            pid.flipOrbitDirection()
+        }
+        _ui.value = _ui.value.copy(followStyle = style)
+    }
+
+    fun cycleFollowStyle() {
+        val order = FollowStyle.entries
+        val idx = order.indexOf(_ui.value.followStyle)
+        setFollowStyle(order[(idx + 1) % order.size])
+    }
+
     /**
      * Dual-joystick update. Pass null to leave an axis unchanged so left/right
      * pads do not zero each other out.
@@ -445,11 +462,11 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 SafetyAction.NONE -> Unit
             }
-            val auto = pid.update(det)
-            // Manual roll always available; blend pitch/yaw/throttle only when stick near zero
+            val auto = pid.update(det, _ui.value.followStyle)
+            // Manual sticks override auto when deflected; ORBIT auto-roll used when stick near zero
             val man = _manualRc.value
             val cmd = RcCommand(
-                roll = man.roll,
+                roll = if (kotlin.math.abs(man.roll) > 15) man.roll else auto.roll,
                 pitch = if (kotlin.math.abs(man.pitch) > 15) man.pitch else auto.pitch,
                 throttle = if (kotlin.math.abs(man.throttle) > 15) man.throttle else auto.throttle,
                 yaw = if (kotlin.math.abs(man.yaw) > 15) man.yaw else auto.yaw,

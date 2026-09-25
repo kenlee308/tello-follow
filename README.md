@@ -8,7 +8,8 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 | Branch / tag | Version | Notes |
 |--------------|---------|-------|
 | `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
-| `v2` (current) | 2.0.0-dev | Body/pose follow + mic mux on Record |
+| `v2` / tag `v2.0.0` | 2.0.0 | Body/pose follow + mic mux on Record |
+| `v2.1` (current) | 2.1.0-dev | Follow flight styles: Chase / Spotlight / Orbit / Cinematic / Sport |
 
 ---
 
@@ -18,6 +19,23 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 - **Mic on Record:** `RECORD_AUDIO` requested when you tap Record. AAC from the phone mic is muxed into the MP4 alongside re-encoded H.264. If permission is denied or audio setup fails, recording continues **video-only** with a status message. Tello's stream itself has no audio.
 
 ---
+
+
+---
+
+## v2.1-dev follow flight styles
+
+Orthogonal to **Body/Face** detection ([FollowMode]). New [FollowStyle] chips near Follow:
+
+| Style | RC behavior |
+|-------|-------------|
+| **Chase** (default) | Legacy: yaw + throttle + pitch for distance; roll = 0 |
+| **Spotlight** | Tripod: yaw + throttle only; pitch = 0, roll = 0 |
+| **Orbit** | Sticky gentle strafe roll (±25); yaw centers subject; pitch holds size; throttle for height. Re-tap Orbit to flip direction. Lost subject → hover + PID reset |
+| **Cinematic** | Softer gains, larger deadzone, max \|rc\| ≈ 35 |
+| **Sport** | Snappier gains, max \|rc\| ≈ 70 (still soft-capped by `MAX_RC=50` on send) |
+
+Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay shows a small style label when following.
 
 ## Safety disclaimer
 
@@ -42,7 +60,7 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 
 1. Clone or copy this folder to your machine.
 2. Open **Android Studio -> Open ->** select the `tello-follow` directory (the one with `settings.gradle.kts`).
-3. Check out branch **`v2`** for body follow + mic (`git checkout v2`). Use **`main`** / tag `v1.0.0` for the face-only release.
+3. Check out branch **`v2.1`** for follow styles (`git checkout v2.1`), **`v2`** / tag `v2.0.0` for body follow + mic, or **`main`** / tag `v1.0.0` for face-only.
 4. Let Gradle sync. If the wrapper JAR is missing, Studio will offer to use its embedded Gradle — accept, or run **File -> New -> Import** and let it generate the wrapper.
 5. Connect a phone via USB (enable developer options + USB debugging), or use wireless debugging.
 6. On the phone: connect Wi-Fi to the Tello SSID (`TELLO-xxxx`). The phone will lose normal internet; that is expected.
@@ -94,8 +112,8 @@ FlightScreen        <-> Compose FPV chrome
 
 - **Body (default):** torso center from shoulders/hips; relative size from landmark bbox (~target 18% of frame area).
 - **Face:** largest face bbox (~target 8% of frame area), same as v1.
-- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs target.
-- Outputs clamped to `-100..100` (UI soft-caps sticks at +/-50). Follow is gated by an explicit toggle.
+- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs target; shaped by **FollowStyle** (Chase/Spot/Orbit/Cinema/Sport).
+- Style soft-clamps outputs; `sendRc` still caps at `MAX_RC=50`. Follow is gated by an explicit toggle.
 - Manual joysticks: left = throttle/yaw, right = pitch/roll; stick deflection >15 overrides the matching auto axis.
 - RC loop sends at **20 Hz** (`sendRc`); follow detection ~15 Hz.
 

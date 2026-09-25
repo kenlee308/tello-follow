@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kenny.tellofollow.safety.SafetyLevel
 import com.kenny.tellofollow.tracking.FollowMode
+import com.kenny.tellofollow.tracking.FollowStyle
 import com.kenny.tellofollow.viewmodel.FlightViewModel
 
 @Composable
@@ -63,6 +64,7 @@ fun FlightScreen(
         OverlayCanvas(
             detection = detection,
             followEnabled = ui.followEnabled,
+            followStyle = ui.followStyle,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -176,6 +178,34 @@ fun FlightScreen(
                     Text("EMERGENCY", fontWeight = FontWeight.Bold)
                 }
             }
+            // Follow flight styles (selectable anytime; active when Follow ON)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FollowStyleChip(
+                    label = "Chase",
+                    selected = ui.followStyle == FollowStyle.CHASE,
+                    onClick = { viewModel.setFollowStyle(FollowStyle.CHASE) },
+                )
+                FollowStyleChip(
+                    label = "Spot",
+                    selected = ui.followStyle == FollowStyle.SPOTLIGHT,
+                    onClick = { viewModel.setFollowStyle(FollowStyle.SPOTLIGHT) },
+                )
+                FollowStyleChip(
+                    label = "Orbit",
+                    selected = ui.followStyle == FollowStyle.ORBIT,
+                    onClick = { viewModel.setFollowStyle(FollowStyle.ORBIT) },
+                )
+                FollowStyleChip(
+                    label = "Cinema",
+                    selected = ui.followStyle == FollowStyle.CINEMATIC,
+                    onClick = { viewModel.setFollowStyle(FollowStyle.CINEMATIC) },
+                )
+                FollowStyleChip(
+                    label = "Sport",
+                    selected = ui.followStyle == FollowStyle.SPORT,
+                    onClick = { viewModel.setFollowStyle(FollowStyle.SPORT) },
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
                     onClick = { viewModel.cycleFollowMode() },
@@ -221,6 +251,26 @@ fun FlightScreen(
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun FollowStyleChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = Modifier.padding(0.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = if (selected) Color(0xFF00E5A0) else Color.White.copy(alpha = 0.12f),
+            contentColor = if (selected) Color.Black else Color.White,
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
     }
 }
 
