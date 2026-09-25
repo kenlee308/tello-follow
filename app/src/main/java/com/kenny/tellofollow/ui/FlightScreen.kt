@@ -201,7 +201,7 @@ fun FlightScreen(
                     onClick = { viewModel.setFollowStyle(FollowStyle.SPORT) },
                 )
             }
-            // Manual stick speed (distinct from Follow styles): soft +/-50 vs Fast +/-100
+            // Manual stick speed: Soft scales full stick->+/-50, Fast->+/-100 (amber toggle)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FastSticksButton(
                     enabled = ui.fastSticks,

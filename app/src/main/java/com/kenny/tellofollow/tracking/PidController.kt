@@ -13,7 +13,7 @@ package com.kenny.tellofollow.tracking
  *
  * Distance: [lockedTargetSize] when set (snapshot at Follow ON), else face/body defaults.
  * Style outputs are soft-clamped here; [TelloCommandClient.MAX_RC] (=100, SDK max) caps on send.
- * Manual sticks store full +/-100; soft (+/-50) vs Fast (+/-100) cap applied at send time.
+ * Manual sticks store full +/-100; Soft scales full stick->+/-50, Fast->+/-100 at send time.
  */
 data class RcCommand(
     val roll: Int = 0,
@@ -30,13 +30,13 @@ data class RcCommand(
  * Flight-style follow modes (v2.1). Orthogonal to [FollowMode] (BODY vs FACE detection).
  */
 enum class FollowStyle {
-    /** Soft cinematic: gentle gains, roomy deadzone, modest RC caps. */
+    /** Chase: softer than Sport; pitch closes distance; roll=0 (yaw frames L/R). */
     CHASE,
     /** Tripod tracking: hover translation; yaw + throttle only. */
     SPOTLIGHT,
     /** Circle: sticky strafe roll while yaw keeps subject centered. */
     ORBIT,
-    /** Original 1x Sport: snappy yaw/throttle + aggressive pitch (maxRc/maxPitch 70). */
+    /** Sport: strong pitch for distance; roll=0 (yaw frames L/R); higher caps. */
     SPORT,
 }
 
@@ -174,13 +174,13 @@ class PidController(
     )
 
     private fun styleConfig(style: FollowStyle): StyleConfig = when (style) {
-        // Soft cinematic (pre-speed-tweak Chase, before Chase was remapped to Sport)
+        // Chase: softer than Sport but must visibly chase. roll=0 by design; distance = pitch.
         FollowStyle.CHASE -> StyleConfig(
-            gainScale = 0.55f,
-            pitchGainScale = 1.8f,
-            deadzone = 0.08f,
-            maxRc = 35,
-            maxPitchRc = 50,
+            gainScale = 0.85f,
+            pitchGainScale = 2.6f,
+            deadzone = 0.05f,
+            maxRc = 50,
+            maxPitchRc = 80,
         )
         FollowStyle.SPOTLIGHT -> StyleConfig(
             gainScale = 1.0f,
@@ -196,13 +196,13 @@ class PidController(
             maxRc = 50,
             maxPitchRc = 40,
         )
-        // Original 1x Sport (not 1.5x/2x); sendRc allows up to SDK +/-100
+        // Sport: stronger pitch; roll=0 by design (yaw handles horizontal); distance = pitch.
         FollowStyle.SPORT -> StyleConfig(
-            gainScale = 1.35f,
-            pitchGainScale = 2.4f,
-            deadzone = 0.025f,
-            maxRc = 70,
-            maxPitchRc = 70,
+            gainScale = 1.55f,
+            pitchGainScale = 3.6f,
+            deadzone = 0.02f,
+            maxRc = 85,
+            maxPitchRc = 100,
         )
     }
 
