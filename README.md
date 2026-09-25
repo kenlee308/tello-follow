@@ -9,7 +9,7 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 |--------------|---------|-------|
 | `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
 | `v2` / tag `v2.0.0` | 2.0.0 | Body/pose follow + mic mux on Record |
-| `v2.1` (current) | 2.1.4-dev | Follow styles: Chase / Spot / Orbit / Sport + distance lock; Chase soft cinematic + Sport 1x restored; Fast sticks send-time cap; sendRc +/-100 |
+| `v2.1` / tag `v2.1.5` | **2.1.5** | Follow styles Chase/Spot/Orbit/Sport; Fast sticks Soft+/-50 / Fast+/-100 full-range scale; distance lock; body/face; phone mic record. APK: `dist/TelloFollow-v2.1.5.apk` |
 
 ---
 
@@ -70,7 +70,7 @@ Styles are selectable anytime; they only drive the drone while **Follow ON**. Ov
 
 1. Clone or copy this folder to your machine.
 2. Open **Android Studio -> Open ->** select the `tello-follow` directory (the one with `settings.gradle.kts`).
-3. Check out branch **`v2.1`** for follow styles (`git checkout v2.1`), **`v2`** / tag `v2.0.0` for body follow + mic, or **`main`** / tag `v1.0.0` for face-only.
+3. Check out branch **`v2.1`** / tag **`v2.1.5`** for follow styles (`git checkout v2.1.5`), **`v2`** / tag `v2.0.0` for body follow + mic, or **`main`** / tag `v1.0.0` for face-only.
 4. Let Gradle sync. If the wrapper JAR is missing, Studio will offer to use its embedded Gradle — accept, or run **File -> New -> Import** and let it generate the wrapper.
 5. Connect a phone via USB (enable developer options + USB debugging), or use wireless debugging.
 6. On the phone: connect Wi-Fi to the Tello SSID (`TELLO-xxxx`). The phone will lose normal internet; that is expected.
