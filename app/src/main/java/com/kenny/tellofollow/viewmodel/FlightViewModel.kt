@@ -47,6 +47,8 @@ data class FlightUiState(
     val recordingWithAudio: Boolean = false,
     val statusMessage: String = "Join TELLO-xxxx Wi-Fi, then Connect",
     val lastPhotoOk: Boolean = false,
+    /** Manual stick soft-cap: false=+/-50, true=+/-100 (SDK max). */
+    val fastSticks: Boolean = false,
 )
 
 /**
@@ -61,6 +63,8 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         private const val RC_PERIOD_MS = 50L
         /** Manual joysticks soft-capped here; follow auto may use full style max up to SDK 100. */
         private const val MANUAL_RC_SOFT_CAP = 50
+        /** Unlocked stick soft-cap when fastSticks is on (SDK max). */
+        private const val MANUAL_RC_FAST_CAP = 100
     }
 
     private val command = TelloCommandClient()
@@ -324,6 +328,17 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
      * Dual-joystick update. Pass null to leave an axis unchanged so left/right
      * pads do not zero each other out.
      */
+    fun setFastSticks(enabled: Boolean) {
+        _ui.value = _ui.value.copy(
+            fastSticks = enabled,
+            statusMessage = if (enabled) "Fast sticks ON (+/-100)" else "Fast sticks OFF (+/-50)",
+        )
+    }
+
+    fun toggleFastSticks() {
+        setFastSticks(!_ui.value.fastSticks)
+    }
+
     fun onManualRc(
         roll: Int? = null,
         pitch: Int? = null,
@@ -331,8 +346,9 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         yaw: Int? = null,
     ) {
         // Only update desired sticks. The 20 Hz loop sends them - never await UDP here.
-        // Soft-cap sticks at +/-50 so feel stays the same after sendRc raised to SDK +/-100.
-        fun stick(v: Int) = v.coerceIn(-MANUAL_RC_SOFT_CAP, MANUAL_RC_SOFT_CAP)
+        // Soft-cap sticks at +/-50 (default) or +/-100 when fastSticks; follow auto unchanged.
+        val cap = if (_ui.value.fastSticks) MANUAL_RC_FAST_CAP else MANUAL_RC_SOFT_CAP
+        fun stick(v: Int) = v.coerceIn(-cap, cap)
         val prev = _manualRc.value
         _manualRc.value = RcCommand(
             roll = stick(roll ?: prev.roll),

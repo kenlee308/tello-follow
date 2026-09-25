@@ -200,6 +200,11 @@ fun FlightScreen(
                     selected = ui.followStyle == FollowStyle.SPORT,
                     onClick = { viewModel.setFollowStyle(FollowStyle.SPORT) },
                 )
+                FollowStyleChip(
+                    label = "Fast",
+                    selected = ui.fastSticks,
+                    onClick = { viewModel.toggleFastSticks() },
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(

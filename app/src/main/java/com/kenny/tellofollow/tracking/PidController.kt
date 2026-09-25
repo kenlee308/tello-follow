@@ -36,7 +36,7 @@ enum class FollowStyle {
     SPOTLIGHT,
     /** Circle: sticky strafe roll while yaw keeps subject centered. */
     ORBIT,
-    /** ~2x Chase: highest gains; pitch especially aggressive (send up to MAX_RC=100). */
+    /** ~1.5x Chase: faster than Chase; pitch aggressive (maxRc/maxPitch 85). */
     SPORT,
 }
 
@@ -196,13 +196,13 @@ class PidController(
             maxRc = 50,
             maxPitchRc = 40,
         )
-        // ~2x Chase gains / pitch aggression; uses full SDK RC range
+        // ~1.5x Chase (was ~2x); midway caps between Chase 70 and SDK 100
         FollowStyle.SPORT -> StyleConfig(
-            gainScale = 2.7f,
-            pitchGainScale = 4.8f,
-            deadzone = 0.02f,
-            maxRc = 100,
-            maxPitchRc = 100,
+            gainScale = 2.025f,
+            pitchGainScale = 3.6f,
+            deadzone = 0.022f,
+            maxRc = 85,
+            maxPitchRc = 85,
         )
     }
 
