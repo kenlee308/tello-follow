@@ -13,6 +13,9 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation" />
 
+    <!-- Phone mic muxed into FPV recordings (Tello stream is silent) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Photo / video to MediaStore (Android 9 and below need WRITE; 10+ uses scoped storage) -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

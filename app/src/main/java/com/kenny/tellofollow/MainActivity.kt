@@ -1,4 +1,4 @@
-﻿package com.kenny.tellofollow
+package com.kenny.tellofollow
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -20,6 +20,8 @@ import com.kenny.tellofollow.viewmodel.FlightViewModel
 /**
  * Single-activity FPV host. Locked to landscape in the manifest.
  * Phone must be joined to the Tello Wi-Fi AP (TELLO-xxxx) before Connect.
+ *
+ * RECORD_AUDIO is requested when the user starts Record; if denied, video-only.
  */
 class MainActivity : ComponentActivity() {
 
@@ -31,6 +33,11 @@ class MainActivity : ComponentActivity() {
             // Connect itself keys off 192.168.10.x, not the SSID string.
         }
 
+    private val micPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            viewModel.toggleRecord(withAudio = granted)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestWifiNamePermissionsIfNeeded()
@@ -38,11 +45,30 @@ class MainActivity : ComponentActivity() {
         setContent {
             TelloFollowTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    FlightScreen(viewModel = viewModel)
+                    FlightScreen(
+                        viewModel = viewModel,
+                        onRecordClick = { onRecordClicked() },
+                    )
                 }
             }
         }
     }
+
+    private fun onRecordClicked() {
+        if (viewModel.ui.value.recording) {
+            viewModel.toggleRecord(withAudio = false) // stop path ignores withAudio
+            return
+        }
+        if (hasMicPermission()) {
+            viewModel.toggleRecord(withAudio = true)
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun hasMicPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
 
     private fun requestWifiNamePermissionsIfNeeded() {
         val needed = mutableListOf<String>()

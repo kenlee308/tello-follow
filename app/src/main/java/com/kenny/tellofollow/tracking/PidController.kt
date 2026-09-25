@@ -1,15 +1,15 @@
 package com.kenny.tellofollow.tracking
 
 /**
- * Three independent PIDs mapping face bbox error → Tello `rc` axes.
+ * Three independent PIDs mapping subject bbox error to Tello `rc` axes.
  *
  * Mapping (standard Tello rc a b c d):
- * - **yaw (d)** ← horizontal center error (face left of frame → yaw left / negative or positive
- *   depending on camera convention; we use: errorX = centerX - 0.5 → yaw = PID(errorX))
- * - **throttle (c)** ← vertical center error (face below center → climb)
- * - **pitch (b)** ← size error vs [targetSize] (too small → fly forward)
- * - **roll (a)** held at 0 in follow mode (strafe optional later)
+ * - **yaw (d)** <- horizontal center error
+ * - **throttle (c)** <- vertical center error (inverted: below center => climb)
+ * - **pitch (b)** <- size error vs target (too small => fly forward)
+ * - **roll (a)** held at 0 in follow mode
  *
+ * Target relative size is larger for BODY (full-frame torso bbox) than FACE.
  * All outputs clamped to [-100, 100]. Deadzone avoids twitchy hover.
  */
 data class RcCommand(
@@ -24,10 +24,10 @@ data class RcCommand(
 }
 
 class PidController(
-    private val targetSize: Float = 0.08f,
+    private val faceTargetSize: Float = 0.08f,
+    private val bodyTargetSize: Float = 0.18f,
     private val deadzone: Float = 0.04f,
 ) {
-    // Tuned for gentle follow; adjust after real flights
     private val yawPid = AxisPid(kp = 120f, ki = 0.0f, kd = 40f)
     private val throttlePid = AxisPid(kp = 140f, ki = 0.0f, kd = 35f)
     private val pitchPid = AxisPid(kp = 90f, ki = 0.0f, kd = 25f)
@@ -45,7 +45,7 @@ class PidController(
     }
 
     /**
-     * @param detection latest face, or null if lost
+     * @param detection latest body/face, or null if lost
      * @return RC command; [RcCommand.HOVER] if follow disabled or no detection
      */
     fun update(detection: DetectionResult?): RcCommand {
@@ -57,12 +57,13 @@ class PidController(
         val dt = if (lastTs == 0L) 0.05f else ((now - lastTs).coerceIn(5L, 200L) / 1000f)
         lastTs = now
 
-        // errorX: positive when face is right of center → yaw right (positive d)
+        val targetSize = when (detection.source) {
+            DetectionSource.BODY -> bodyTargetSize
+            DetectionSource.FACE -> faceTargetSize
+        }
+
         val errorX = applyDeadzone(detection.centerX - 0.5f)
-        // errorY: positive when face is below center → need to go down (negative throttle)
-        // Tello c: positive = up, so we invert Y
         val errorY = applyDeadzone(detection.centerY - 0.5f)
-        // size: positive when face too small (far) → fly forward (positive pitch b)
         val errorSize = applyDeadzone(targetSize - detection.relativeSize)
 
         val yaw = yawPid.step(errorX, dt).toInt().coerceIn(-100, 100)

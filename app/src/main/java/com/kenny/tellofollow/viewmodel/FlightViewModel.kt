@@ -19,6 +19,7 @@ import com.kenny.tellofollow.tello.TelloStateListener
 import com.kenny.tellofollow.tello.TelloTelemetry
 import com.kenny.tellofollow.tello.TelloVideoReceiver
 import com.kenny.tellofollow.tracking.DetectionResult
+import com.kenny.tellofollow.tracking.FollowMode
 import com.kenny.tellofollow.tracking.PersonDetector
 import com.kenny.tellofollow.tracking.PidController
 import com.kenny.tellofollow.tracking.RcCommand
@@ -37,8 +38,11 @@ data class FlightUiState(
     val flying: Boolean = false,
     val streaming: Boolean = false,
     val followEnabled: Boolean = false,
+    /** Default Body; Face keeps v1 face-only tracking. */
+    val followMode: FollowMode = FollowMode.BODY,
     val recording: Boolean = false,
-    val statusMessage: String = "Join TELLO-xxxx Wiâ€‘Fi, then Connect",
+    val recordingWithAudio: Boolean = false,
+    val statusMessage: String = "Join TELLO-xxxx Wi-Fi, then Connect",
     val lastPhotoOk: Boolean = false,
 )
 
@@ -272,6 +276,18 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleFollow() = setFollow(!_ui.value.followEnabled)
 
+    fun setFollowMode(mode: FollowMode) {
+        _ui.value = _ui.value.copy(followMode = mode)
+    }
+
+    fun cycleFollowMode() {
+        val next = when (_ui.value.followMode) {
+            FollowMode.BODY -> FollowMode.FACE
+            FollowMode.FACE -> FollowMode.BODY
+        }
+        setFollowMode(next)
+    }
+
     /**
      * Dual-joystick update. Pass null to leave an axis unchanged so left/right
      * pads do not zero each other out.
@@ -307,16 +323,28 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun toggleRecord() {
+    fun toggleRecord(withAudio: Boolean = true) {
         viewModelScope.launch {
             if (videoRecorder.isRecording) {
                 videoRecorder.stop()
-                _ui.value = _ui.value.copy(recording = false, statusMessage = "Recording saved")
+                _ui.value = _ui.value.copy(
+                    recording = false,
+                    recordingWithAudio = false,
+                    statusMessage = "Recording saved",
+                )
             } else {
-                val ok = withContext(Dispatchers.IO) { videoRecorder.start() }
+                val ok = withContext(Dispatchers.IO) { videoRecorder.start(withAudio = withAudio) }
+                val hasAudio = ok && videoRecorder.isRecordingWithAudio
+                val msg = when {
+                    !ok -> "Record failed"
+                    hasAudio -> "Recording (mic on)..."
+                    withAudio -> "Recording (video only - mic denied/unavailable)"
+                    else -> "Recording (video only)..."
+                }
                 _ui.value = _ui.value.copy(
                     recording = ok,
-                    statusMessage = if (ok) "Recordingâ€¦" else "Record failed",
+                    recordingWithAudio = hasAudio,
+                    statusMessage = msg,
                 )
             }
         }
@@ -397,7 +425,9 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
             val bmp = latestBmp
             var det: DetectionResult? = null
             if (bmp != null) {
-                det = withContext(Dispatchers.Default) { detector.detect(bmp) }
+                det = withContext(Dispatchers.Default) {
+                    detector.detect(bmp, _ui.value.followMode)
+                }
             }
             _detection.value = det
             val safetyAction = safety.onFollowFrame(det != null, pid.followEnabled)

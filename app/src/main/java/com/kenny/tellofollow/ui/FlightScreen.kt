@@ -38,10 +38,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kenny.tellofollow.safety.SafetyLevel
+import com.kenny.tellofollow.tracking.FollowMode
 import com.kenny.tellofollow.viewmodel.FlightViewModel
 
 @Composable
-fun FlightScreen(viewModel: FlightViewModel) {
+fun FlightScreen(
+    viewModel: FlightViewModel,
+    onRecordClick: () -> Unit = { viewModel.toggleRecord() },
+) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
     val detection by viewModel.detection.collectAsStateWithLifecycle()
@@ -173,6 +177,17 @@ fun FlightScreen(viewModel: FlightViewModel) {
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(
+                    onClick = { viewModel.cycleFollowMode() },
+                    enabled = ui.connected,
+                ) {
+                    Text(
+                        when (ui.followMode) {
+                            FollowMode.BODY -> "Body"
+                            FollowMode.FACE -> "Face"
+                        }
+                    )
+                }
                 Button(
                     onClick = { viewModel.toggleFollow() },
                     enabled = ui.connected && ui.flying,
@@ -194,7 +209,7 @@ fun FlightScreen(viewModel: FlightViewModel) {
                     Text("Photo")
                 }
                 FilledTonalButton(
-                    onClick = { viewModel.toggleRecord() },
+                    onClick = onRecordClick,
                     enabled = ui.streaming,
                 ) {
                     Icon(
