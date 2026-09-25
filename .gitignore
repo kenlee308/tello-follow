@@ -1,0 +1,25 @@
+﻿# Built / IDE
+*.iml
+.gradle/
+.idea/
+.kotlin/
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Local machine config
+local.properties
+
+# Binaries (keep source; APKs live in dist/ on disk only)
+*.apk
+*.ap_
+*.aab
+*.dex
+/dist/
+
+# Scratch / agent patch scripts
+_*.py
+*.log

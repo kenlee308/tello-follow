@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TelloFollow</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="takeoff">Takeoff</string>
+    <string name="land">Land</string>
+    <string name="emergency">EMERGENCY</string>
+    <string name="follow_on">Follow ON</string>
+    <string name="follow_off">Follow OFF</string>
+    <string name="photo">Photo</string>
+    <string name="record">Record</string>
+    <string name="stop_record">Stop</string>
+    <string name="safety_disclaimer">Fly clear of people and obstacles. No GPS — wind and Wi‑Fi dropouts can cause loss of control. You assume all risk.</string>
+</resources>
