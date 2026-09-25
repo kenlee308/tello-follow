@@ -196,9 +196,9 @@ fun FlightScreen(
                     onClick = { viewModel.setFollowStyle(FollowStyle.ORBIT) },
                 )
                 FollowStyleChip(
-                    label = "Cinema",
-                    selected = ui.followStyle == FollowStyle.CINEMATIC,
-                    onClick = { viewModel.setFollowStyle(FollowStyle.CINEMATIC) },
+                    label = "Parallel",
+                    selected = ui.followStyle == FollowStyle.PARALLEL,
+                    onClick = { viewModel.setFollowStyle(FollowStyle.PARALLEL) },
                 )
                 FollowStyleChip(
                     label = "Sport",

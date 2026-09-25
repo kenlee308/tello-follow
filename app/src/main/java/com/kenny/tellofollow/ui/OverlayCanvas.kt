@@ -37,7 +37,7 @@ fun OverlayCanvas(
         FollowStyle.CHASE -> "CHASE"
         FollowStyle.SPOTLIGHT -> "SPOT"
         FollowStyle.ORBIT -> "ORBIT"
-        FollowStyle.CINEMATIC -> "CINEMA"
+        FollowStyle.PARALLEL -> "PARA"
         FollowStyle.SPORT -> "SPORT"
     }
     Box(modifier = modifier) {

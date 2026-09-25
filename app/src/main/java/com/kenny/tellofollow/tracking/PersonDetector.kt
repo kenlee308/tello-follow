@@ -38,6 +38,9 @@ data class LandmarkPoint(
  * face remains a fallback when pose misses or [FollowMode.FACE] is selected.
  *
  * Coordinates are normalized to [0,1] so PID is resolution-agnostic.
+ *
+ * Distance proxy: BODY uses normalized shoulder span (stable when hips/legs
+ * are cropped); FACE uses face box area. [distanceMetric] is what PID locks.
  */
 data class DetectionResult(
     val box: RectF,
@@ -45,7 +48,10 @@ data class DetectionResult(
     val centerX: Float,
     /** Center Y in 0..1 (0=top, 1=bottom). */
     val centerY: Float,
-    /** Box area relative to frame (0..1). Proxy for subject distance. */
+    /**
+     * Size proxy for distance (0..1). BODY: shoulderWidth/frameWidth;
+     * FACE: face box area. Same value as [distanceMetric].
+     */
     val relativeSize: Float,
     val timestampMs: Long = System.currentTimeMillis(),
     val source: DetectionSource = DetectionSource.FACE,
@@ -53,6 +59,11 @@ data class DetectionResult(
     val landmarks: List<LandmarkPoint> = emptyList(),
     /** Skeleton edges as index pairs into [landmarks]. */
     val skeletonEdges: List<Pair<Int, Int>> = emptyList(),
+    /**
+     * Explicit distance metric for PID lock / size error.
+     * Defaults to [relativeSize].
+     */
+    val distanceMetric: Float = relativeSize,
 )
 
 /**
@@ -60,12 +71,15 @@ data class DetectionResult(
  *
  * Body target: midpoint of shoulders + hips (torso center). If hips are weak,
  * shoulders alone with a slight downward bias. BBox from landmark extents.
+ * Distance from shoulder width (not full-body bbox area) so partial upper-body
+ * still yields a stable distance signal.
  */
 class PersonDetector {
 
     companion object {
         private const val TAG = "PersonDetector"
-        private const val MIN_LIKELIHOOD = 0.5f
+        /** Slightly lower so weak hip landmarks do not kill upper-body detections. */
+        private const val MIN_LIKELIHOOD = 0.40f
 
         private val SKELETON_PAIRS: List<Pair<Int, Int>> = listOf(
             PoseLandmark.LEFT_SHOULDER to PoseLandmark.RIGHT_SHOULDER,
@@ -152,13 +166,16 @@ class PersonDetector {
             return if (p.inFrameLikelihood >= MIN_LIKELIHOOD) p else null
         }
 
+        // Both shoulders required for a stable torso / distance signal.
         val leftShoulder = lm(PoseLandmark.LEFT_SHOULDER) ?: return null
         val rightShoulder = lm(PoseLandmark.RIGHT_SHOULDER) ?: return null
+        // Hips optional — partial upper body (cropped legs) still tracks.
         val leftHip = lm(PoseLandmark.LEFT_HIP)
         val rightHip = lm(PoseLandmark.RIGHT_HIP)
 
         val shoulderCx = (leftShoulder.position.x + rightShoulder.position.x) / 2f
         val shoulderCy = (leftShoulder.position.y + rightShoulder.position.y) / 2f
+        val shoulderWidthPx = kotlin.math.abs(rightShoulder.position.x - leftShoulder.position.x)
 
         val centerPx: Float
         val centerPy: Float
@@ -168,9 +185,9 @@ class PersonDetector {
             centerPx = (shoulderCx + hipCx) / 2f
             centerPy = (shoulderCy + hipCy) / 2f
         } else {
-            val sw = kotlin.math.abs(rightShoulder.position.x - leftShoulder.position.x)
+            // Shoulders alone with downward bias toward torso mid.
             centerPx = shoulderCx
-            centerPy = shoulderCy + sw * 0.35f
+            centerPy = shoulderCy + shoulderWidthPx * 0.35f
         }
 
         var minX = Float.POSITIVE_INFINITY
@@ -204,12 +221,15 @@ class PersonDetector {
         val box = RectF(minX / w, minY / h, maxX / w, maxY / h)
         val cx = (centerPx / w).coerceIn(0f, 1f)
         val cy = (centerPy / h).coerceIn(0f, 1f)
-        val rel = ((box.right - box.left) * (box.bottom - box.top)).coerceIn(0f, 1f)
+
+        // Distance proxy: normalized shoulder span (stable when hips/legs cropped).
+        val shoulderFrac = (shoulderWidthPx / w).coerceIn(0f, 1f)
 
         val points = ArrayList<LandmarkPoint>(DRAW_TYPES.size)
         val typeToIndex = HashMap<Int, Int>(DRAW_TYPES.size)
         for (type in DRAW_TYPES) {
             val p = pose.getPoseLandmark(type) ?: continue
+            // Draw slightly weaker landmarks than the detection gate.
             if (p.inFrameLikelihood < MIN_LIKELIHOOD * 0.6f) continue
             typeToIndex[type] = points.size
             points.add(
@@ -231,10 +251,11 @@ class PersonDetector {
             box = box,
             centerX = cx,
             centerY = cy,
-            relativeSize = rel,
+            relativeSize = shoulderFrac,
             source = DetectionSource.BODY,
             landmarks = points,
             skeletonEdges = edges,
+            distanceMetric = shoulderFrac,
         )
     }
 
@@ -248,13 +269,14 @@ class PersonDetector {
         val box = RectF(b.left / w, b.top / h, b.right / w, b.bottom / h)
         val cx = (box.left + box.right) / 2f
         val cy = (box.top + box.bottom) / 2f
-        val rel = ((box.right - box.left) * (box.bottom - box.top)).coerceIn(0f, 1f)
+        val area = ((box.right - box.left) * (box.bottom - box.top)).coerceIn(0f, 1f)
         return DetectionResult(
             box = box,
             centerX = cx,
             centerY = cy,
-            relativeSize = rel,
+            relativeSize = area,
             source = DetectionSource.FACE,
+            distanceMetric = area,
         )
     }
 

@@ -9,7 +9,7 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 |--------------|---------|-------|
 | `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
 | `v2` / tag `v2.0.0` | 2.0.0 | Body/pose follow + mic mux on Record |
-| `v2.1` (current) | 2.1.0-dev | Follow flight styles: Chase / Spotlight / Orbit / Cinematic / Sport |
+| `v2.1` (current) | 2.1.1-dev | Follow styles: Chase / Spot / Orbit / Parallel / Sport + distance lock |
 
 ---
 
@@ -25,17 +25,26 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 
 ## v2.1-dev follow flight styles
 
-Orthogonal to **Body/Face** detection ([FollowMode]). New [FollowStyle] chips near Follow:
+Orthogonal to **Body/Face** detection ([FollowMode]). [FollowStyle] chips near Follow (order):
+
+**Chase | Spot | Orbit | Parallel | Sport**
 
 | Style | RC behavior |
 |-------|-------------|
-| **Chase** (default) | Legacy: yaw + throttle + pitch for distance; roll = 0 |
+| **Chase** (default) | Soft yaw/throttle (old cinematic: gain×0.55, deadzone 0.08, max ~35); **boosted pitch** for distance (pitchGain ~1.8, maxPitch ~50); roll = 0 |
 | **Spotlight** | Tripod: yaw + throttle only; pitch = 0, roll = 0 |
-| **Orbit** | Sticky gentle strafe roll (±25); yaw centers subject; pitch holds size; throttle for height. Re-tap Orbit to flip direction. Lost subject → hover + PID reset |
-| **Cinematic** | Softer gains, larger deadzone, max \|rc\| ≈ 35 |
-| **Sport** | Snappier gains, max \|rc\| ≈ 70 (still soft-capped by `MAX_RC=50` on send) |
+| **Orbit** | Sticky gentle strafe roll (±25); yaw centers subject; light pitch for size; throttle for height. Re-tap Orbit to flip direction. Lost subject → hover + PID reset (strafe sign sticky) |
+| **Parallel** | Side-track: sticky lateral strafe (±24) while yaw centers and throttle frames; **light** pitch holds locked distance (not aggressive forward chase). Re-tap Parallel to flip strafe. Lost → hover + PID reset; strafe sign sticky. Distinct from Orbit (beside subject on a lateral path, not circling) |
+| **Sport** | Snappier yaw/throttle (gain×1.35); **aggressive pitch** (pitchGain ~2.4) so distance snaps to MAX_RC sooner; soft max ~70 then send-capped at `MAX_RC=50` |
 
-Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay shows a small style label when following.
+### Distance lock + shoulder-width metric
+
+- On **Follow ON** (or first good detection while follow is on), PID snapshots `lockedTargetSize` from the detection distance proxy and holds that range until Follow OFF.
+- **BODY** distance proxy = normalized **shoulder width** / frame width (stable when hips/legs are cropped / only upper body visible). Both shoulders still required; hips optional.
+- **FACE** distance proxy = face box area (unchanged).
+- Unlocked fallback targets: body ~0.20 shoulder-frac, face ~0.08 area.
+
+Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay labels: `CHASE` / `SPOT` / `ORBIT` / `PARA` / `SPORT`.
 
 ## Safety disclaimer
 
@@ -110,9 +119,9 @@ FlightScreen        <-> Compose FPV chrome
 
 ### Follow control
 
-- **Body (default):** torso center from shoulders/hips; relative size from landmark bbox (~target 18% of frame area).
+- **Body (default):** torso center from shoulders/hips; distance from **shoulder width / frame width** (locked at Follow ON; fallback target ~0.20).
 - **Face:** largest face bbox (~target 8% of frame area), same as v1.
-- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs target; shaped by **FollowStyle** (Chase/Spot/Orbit/Cinema/Sport).
+- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs locked/default target (separate pitchGainScale); shaped by **FollowStyle** (Chase/Spot/Orbit/Parallel/Sport).
 - Style soft-clamps outputs; `sendRc` still caps at `MAX_RC=50`. Follow is gated by an explicit toggle.
 - Manual joysticks: left = throttle/yaw, right = pitch/roll; stick deflection >15 overrides the matching auto axis.
 - RC loop sends at **20 Hz** (`sendRc`); follow detection ~15 Hz.

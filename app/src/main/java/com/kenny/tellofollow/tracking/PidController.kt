@@ -1,16 +1,18 @@
 package com.kenny.tellofollow.tracking
 
 /**
- * Three independent PIDs mapping subject bbox error to Tello `rc` axes,
+ * Three independent PIDs mapping subject bbox error to Tello 
+c axes,
  * shaped by [FollowStyle] (flight personality — distinct from [FollowMode] body/face).
  *
  * Mapping (standard Tello rc a b c d):
  * - **yaw (d)** <- horizontal center error
  * - **throttle (c)** <- vertical center error (inverted: below center => climb)
- * - **pitch (b)** <- size error vs target (too small => fly forward); forced 0 in SPOTLIGHT
- * - **roll (a)** 0 in CHASE/SPOTLIGHT/CINEMATIC/SPORT; sticky strafe in ORBIT
+ * - **pitch (b)** <- size error vs locked/default target (too small => fly forward);
+ *   forced 0 in SPOTLIGHT; light in PARALLEL
+ * - **roll (a)** 0 in CHASE/SPOTLIGHT/SPORT; sticky strafe in ORBIT/PARALLEL
  *
- * Target relative size is larger for BODY (full-frame torso bbox) than FACE.
+ * Distance: [lockedTargetSize] when set (snapshot at Follow ON), else face/body defaults.
  * Style outputs are soft-clamped here; [TelloCommandClient.MAX_RC] (=50) still caps on send.
  */
 data class RcCommand(
@@ -28,21 +30,21 @@ data class RcCommand(
  * Flight-style follow modes (v2.1). Orthogonal to [FollowMode] (BODY vs FACE detection).
  */
 enum class FollowStyle {
-    /** Default: yaw + throttle + pitch for distance; roll = 0. */
+    /** Soft yaw/throttle (old cinematic feel) + boosted pitch for distance. */
     CHASE,
     /** Tripod tracking: hover translation; yaw + throttle only. */
     SPOTLIGHT,
     /** Circle: sticky strafe roll while yaw keeps subject centered. */
     ORBIT,
-    /** Softer CHASE: larger deadzone, lower max |rc|. */
-    CINEMATIC,
-    /** Snappier CHASE: higher gains, higher max |rc| (still soft-capped on send). */
+    /** Side-track: sticky lateral strafe; yaw centers; light pitch for locked distance. */
+    PARALLEL,
+    /** Snappier: higher gains; pitch especially aggressive (send still MAX_RC=50). */
     SPORT,
 }
 
 class PidController(
     private val faceTargetSize: Float = 0.08f,
-    private val bodyTargetSize: Float = 0.18f,
+    private val bodyTargetSize: Float = 0.20f,
     private val baseDeadzone: Float = 0.04f,
 ) {
     private val yawPid = AxisPid(kp = 120f, ki = 0.0f, kd = 40f)
@@ -52,10 +54,17 @@ class PidController(
     @Volatile
     var followEnabled: Boolean = false
 
-    /** Sticky ORBIT strafe sign: +1 = right, -1 = left. Survives brief detection loss. */
+    /**
+     * Sticky strafe sign for ORBIT / PARALLEL: +1 = right, -1 = left.
+     * Survives brief detection loss and PID reset.
+     */
     @Volatile
-    var orbitRollSign: Int = 1
+    var strafeRollSign: Int = 1
         private set
+
+    /** Snapshot of subject size at Follow ON (distance lock). Null = use mode defaults. */
+    @Volatile
+    private var lockedTargetSize: Float? = null
 
     private var lastTs = 0L
 
@@ -64,20 +73,40 @@ class PidController(
         throttlePid.reset()
         pitchPid.reset()
         lastTs = 0L
+        // Keep strafeRollSign and lockedTargetSize across brief loss / reset.
     }
 
-    /** Flip ORBIT strafe direction (call from UI when re-tapping Orbit). */
+    /** Flip ORBIT / PARALLEL strafe direction (call from UI when re-tapping style). */
     fun flipOrbitDirection() {
-        orbitRollSign = if (orbitRollSign >= 0) -1 else 1
+        strafeRollSign = if (strafeRollSign >= 0) -1 else 1
     }
+
+    fun flipStrafeDirection() = flipOrbitDirection()
 
     fun setOrbitDirection(sign: Int) {
-        orbitRollSign = if (sign >= 0) 1 else -1
+        strafeRollSign = if (sign >= 0) 1 else -1
     }
 
     /**
+     * Lock follow distance from the current detection size proxy
+     * (BODY: shoulder-width / frame width; FACE: face box area).
+     */
+    fun lockDistanceFrom(detection: DetectionResult) {
+        val metric = detection.distanceMetric
+        if (metric > 0.01f) {
+            lockedTargetSize = metric.coerceIn(0.02f, 0.85f)
+        }
+    }
+
+    fun clearDistanceLock() {
+        lockedTargetSize = null
+    }
+
+    fun hasDistanceLock(): Boolean = lockedTargetSize != null
+
+    /**
      * @param detection latest body/face, or null if lost
-     * @param style flight personality (default CHASE = legacy behavior)
+     * @param style flight personality (default CHASE)
      * @return RC command; [RcCommand.HOVER] if follow disabled or no detection
      */
     fun update(
@@ -92,19 +121,21 @@ class PidController(
         val dt = if (lastTs == 0L) 0.05f else ((now - lastTs).coerceIn(5L, 200L) / 1000f)
         lastTs = now
 
-        val targetSize = when (detection.source) {
+        val defaultSize = when (detection.source) {
             DetectionSource.BODY -> bodyTargetSize
             DetectionSource.FACE -> faceTargetSize
         }
+        val targetSize = lockedTargetSize ?: defaultSize
 
         val cfg = styleConfig(style)
         val errorX = applyDeadzone(detection.centerX - 0.5f, cfg.deadzone)
         val errorY = applyDeadzone(detection.centerY - 0.5f, cfg.deadzone)
-        val errorSize = applyDeadzone(targetSize - detection.relativeSize, cfg.deadzone)
+        val sizeProxy = detection.distanceMetric
+        val errorSize = applyDeadzone(targetSize - sizeProxy, cfg.deadzone)
 
         var yaw = (yawPid.step(errorX, dt) * cfg.gainScale).toInt()
         var throttle = (-throttlePid.step(errorY, dt) * cfg.gainScale).toInt()
-        var pitch = (pitchPid.step(errorSize, dt) * cfg.gainScale).toInt()
+        var pitch = (pitchPid.step(errorSize, dt) * cfg.pitchGainScale).toInt()
         var roll = 0
 
         when (style) {
@@ -113,17 +144,25 @@ class PidController(
                 roll = 0
             }
             FollowStyle.ORBIT -> {
-                roll = orbitRollSign * ORBIT_ROLL_MAG
-                // Keep a light pitch for distance so orbit radius stays usable
+                roll = strafeRollSign * ORBIT_ROLL_MAG
+                // Light pitch already via pitchGainScale in styleConfig
             }
-            FollowStyle.CHASE, FollowStyle.CINEMATIC, FollowStyle.SPORT -> {
+            FollowStyle.PARALLEL -> {
+                // Side-track: keep sticky strafe even when subject drifts;
+                // yaw still works hard to re-center. Blend: never kill roll entirely.
+                val absX = kotlin.math.abs(detection.centerX - 0.5f)
+                val rollScale = if (absX > 0.22f) 0.65f else 1f
+                roll = (strafeRollSign * PARALLEL_ROLL_MAG * rollScale).toInt()
+                // pitchGainScale already light — maintain locked distance, not chase-forward
+            }
+            FollowStyle.CHASE, FollowStyle.SPORT -> {
                 roll = 0
             }
         }
 
         yaw = yaw.coerceIn(-cfg.maxRc, cfg.maxRc)
         throttle = throttle.coerceIn(-cfg.maxRc, cfg.maxRc)
-        pitch = pitch.coerceIn(-cfg.maxRc, cfg.maxRc)
+        pitch = pitch.coerceIn(-cfg.maxPitchRc, cfg.maxPitchRc)
         roll = roll.coerceIn(-cfg.maxRc, cfg.maxRc)
 
         return RcCommand(roll = roll, pitch = pitch, throttle = throttle, yaw = yaw)
@@ -133,22 +172,63 @@ class PidController(
         if (kotlin.math.abs(e) < deadzone) 0f else e
 
     private data class StyleConfig(
+        /** Scale for yaw + throttle AxisPid outputs. */
         val gainScale: Float,
+        /** Scale for pitch only (distance follow). */
+        val pitchGainScale: Float,
         val deadzone: Float,
+        /** Soft clamp for yaw / throttle / roll. */
         val maxRc: Int,
+        /** Soft clamp for pitch (may exceed maxRc for CHASE distance snap). */
+        val maxPitchRc: Int,
     )
 
     private fun styleConfig(style: FollowStyle): StyleConfig = when (style) {
-        FollowStyle.CHASE -> StyleConfig(gainScale = 1.0f, deadzone = baseDeadzone, maxRc = 50)
-        FollowStyle.SPOTLIGHT -> StyleConfig(gainScale = 1.0f, deadzone = baseDeadzone, maxRc = 50)
-        FollowStyle.ORBIT -> StyleConfig(gainScale = 1.0f, deadzone = baseDeadzone, maxRc = 50)
-        FollowStyle.CINEMATIC -> StyleConfig(gainScale = 0.55f, deadzone = 0.08f, maxRc = 35)
-        FollowStyle.SPORT -> StyleConfig(gainScale = 1.35f, deadzone = 0.025f, maxRc = 70)
+        // Soft yaw/throttle like old CINEMATIC; pitch ~1.8× cinematic base (0.55 → ~1.0 effective vs old chase)
+        FollowStyle.CHASE -> StyleConfig(
+            gainScale = 0.55f,
+            pitchGainScale = 1.8f,
+            deadzone = 0.08f,
+            maxRc = 35,
+            maxPitchRc = 50,
+        )
+        FollowStyle.SPOTLIGHT -> StyleConfig(
+            gainScale = 1.0f,
+            pitchGainScale = 0f,
+            deadzone = baseDeadzone,
+            maxRc = 50,
+            maxPitchRc = 0,
+        )
+        FollowStyle.ORBIT -> StyleConfig(
+            gainScale = 1.0f,
+            pitchGainScale = 0.85f,
+            deadzone = baseDeadzone,
+            maxRc = 50,
+            maxPitchRc = 40,
+        )
+        // Strafe-dominant side follow; light pitch for locked distance only
+        FollowStyle.PARALLEL -> StyleConfig(
+            gainScale = 1.0f,
+            pitchGainScale = 0.70f,
+            deadzone = baseDeadzone,
+            maxRc = 50,
+            maxPitchRc = 35,
+        )
+        // Snappy overall; pitch ~2.4× old chase base so it hits MAX_RC sooner
+        FollowStyle.SPORT -> StyleConfig(
+            gainScale = 1.35f,
+            pitchGainScale = 2.4f,
+            deadzone = 0.025f,
+            maxRc = 70,
+            maxPitchRc = 70,
+        )
     }
 
     companion object {
         /** Gentle constant strafe magnitude for ORBIT (within MAX_RC soft cap). */
         const val ORBIT_ROLL_MAG = 25
+        /** Slightly stronger lateral for PARALLEL side-track. */
+        const val PARALLEL_ROLL_MAG = 24
     }
 }
 

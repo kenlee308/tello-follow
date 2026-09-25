@@ -264,14 +264,26 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** One-shot: lock distance on first good detection after Follow ON. */
+    @Volatile private var distanceLockPending: Boolean = false
+
     fun setFollow(enabled: Boolean) {
         pid.followEnabled = enabled
         if (!enabled) {
             followJob?.cancel()
             followJob = null
             pid.reset()
+            pid.clearDistanceLock()
+            distanceLockPending = false
             command.sendRc(0, 0, 0, 0)
         } else if (followJob == null) {
+            val det = _detection.value
+            if (det != null) {
+                pid.lockDistanceFrom(det)
+                distanceLockPending = false
+            } else {
+                distanceLockPending = true
+            }
             followJob = viewModelScope.launch(Dispatchers.Default) { followLoop() }
         }
         _ui.value = _ui.value.copy(followEnabled = enabled)
@@ -292,9 +304,12 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setFollowStyle(style: FollowStyle) {
-        // Re-tapping Orbit flips strafe direction
-        if (style == FollowStyle.ORBIT && _ui.value.followStyle == FollowStyle.ORBIT) {
-            pid.flipOrbitDirection()
+        // Re-tapping Orbit or Parallel flips sticky strafe direction
+        val cur = _ui.value.followStyle
+        if (style == FollowStyle.ORBIT && cur == FollowStyle.ORBIT) {
+            pid.flipStrafeDirection()
+        } else if (style == FollowStyle.PARALLEL && cur == FollowStyle.PARALLEL) {
+            pid.flipStrafeDirection()
         }
         _ui.value = _ui.value.copy(followStyle = style)
     }
@@ -447,6 +462,10 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             _detection.value = det
+            if (distanceLockPending && det != null) {
+                pid.lockDistanceFrom(det)
+                distanceLockPending = false
+            }
             val safetyAction = safety.onFollowFrame(det != null, pid.followEnabled)
             when (safetyAction) {
                 SafetyAction.LAND -> {
