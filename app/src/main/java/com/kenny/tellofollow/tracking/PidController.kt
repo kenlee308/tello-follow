@@ -13,7 +13,7 @@ package com.kenny.tellofollow.tracking
  *
  * Distance: [lockedTargetSize] when set (snapshot at Follow ON), else face/body defaults.
  * Style outputs are soft-clamped here; [TelloCommandClient.MAX_RC] (=100, SDK max) caps on send.
- * Manual sticks are soft-capped at +/-50 in FlightViewModel.onManualRc.
+ * Manual sticks store full +/-100; soft (+/-50) vs Fast (+/-100) cap applied at send time.
  */
 data class RcCommand(
     val roll: Int = 0,
@@ -30,13 +30,13 @@ data class RcCommand(
  * Flight-style follow modes (v2.1). Orthogonal to [FollowMode] (BODY vs FACE detection).
  */
 enum class FollowStyle {
-    /** Former Sport pace: snappy yaw/throttle + aggressive pitch for distance. */
+    /** Soft cinematic: gentle gains, roomy deadzone, modest RC caps. */
     CHASE,
     /** Tripod tracking: hover translation; yaw + throttle only. */
     SPOTLIGHT,
     /** Circle: sticky strafe roll while yaw keeps subject centered. */
     ORBIT,
-    /** ~1.5x Chase: faster than Chase; pitch aggressive (maxRc/maxPitch 85). */
+    /** Original 1x Sport: snappy yaw/throttle + aggressive pitch (maxRc/maxPitch 70). */
     SPORT,
 }
 
@@ -174,13 +174,13 @@ class PidController(
     )
 
     private fun styleConfig(style: FollowStyle): StyleConfig = when (style) {
-        // Former Sport pace (v2.1.1); sendRc now allows full style max up to SDK +/-100
+        // Soft cinematic (pre-speed-tweak Chase, before Chase was remapped to Sport)
         FollowStyle.CHASE -> StyleConfig(
-            gainScale = 1.35f,
-            pitchGainScale = 2.4f,
-            deadzone = 0.025f,
-            maxRc = 70,
-            maxPitchRc = 70,
+            gainScale = 0.55f,
+            pitchGainScale = 1.8f,
+            deadzone = 0.08f,
+            maxRc = 35,
+            maxPitchRc = 50,
         )
         FollowStyle.SPOTLIGHT -> StyleConfig(
             gainScale = 1.0f,
@@ -196,13 +196,13 @@ class PidController(
             maxRc = 50,
             maxPitchRc = 40,
         )
-        // ~1.5x Chase (was ~2x); midway caps between Chase 70 and SDK 100
+        // Original 1x Sport (not 1.5x/2x); sendRc allows up to SDK +/-100
         FollowStyle.SPORT -> StyleConfig(
-            gainScale = 2.025f,
-            pitchGainScale = 3.6f,
-            deadzone = 0.022f,
-            maxRc = 85,
-            maxPitchRc = 85,
+            gainScale = 1.35f,
+            pitchGainScale = 2.4f,
+            deadzone = 0.025f,
+            maxRc = 70,
+            maxPitchRc = 70,
         )
     }
 

@@ -200,13 +200,13 @@ fun FlightScreen(
                     selected = ui.followStyle == FollowStyle.SPORT,
                     onClick = { viewModel.setFollowStyle(FollowStyle.SPORT) },
                 )
-                FollowStyleChip(
-                    label = "Fast",
-                    selected = ui.fastSticks,
+            }
+            // Manual stick speed (distinct from Follow styles): soft +/-50 vs Fast +/-100
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FastSticksButton(
+                    enabled = ui.fastSticks,
                     onClick = { viewModel.toggleFastSticks() },
                 )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(
                     onClick = { viewModel.cycleFollowMode() },
                     enabled = ui.connected,
@@ -271,6 +271,29 @@ private fun FollowStyleChip(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+
+/** Amber/orange stick-speed toggle - visually distinct from green Follow style chips. */
+@Composable
+private fun FastSticksButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = if (enabled) Color(0xFFFFB300) else Color.White.copy(alpha = 0.12f),
+            contentColor = if (enabled) Color(0xFF1A1200) else Color.White,
+        ),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            if (enabled) "Sticks: Fast" else "Sticks: Soft",
+            fontSize = 12.sp,
+            fontWeight = if (enabled) FontWeight.Bold else FontWeight.Normal,
+        )
     }
 }
 

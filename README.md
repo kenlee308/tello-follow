@@ -9,7 +9,7 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 |--------------|---------|-------|
 | `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
 | `v2` / tag `v2.0.0` | 2.0.0 | Body/pose follow + mic mux on Record |
-| `v2.1` (current) | 2.1.3-dev | Follow styles: Chase / Spot / Orbit / Sport + distance lock (Sport ~1.5x Chase; Fast sticks toggle; sendRc +/-100) |
+| `v2.1` (current) | 2.1.4-dev | Follow styles: Chase / Spot / Orbit / Sport + distance lock; Chase soft cinematic + Sport 1x restored; Fast sticks send-time cap; sendRc +/-100 |
 
 ---
 
@@ -31,10 +31,10 @@ Orthogonal to **Body/Face** detection ([FollowMode]). [FollowStyle] chips near F
 
 | Style | RC behavior |
 |-------|-------------|
-| **Chase** (default) | Former Sport pace: gain×1.35, pitchGain ~2.4, deadzone 0.025, maxRc/maxPitch ~70; roll = 0 |
+| **Chase** (default) | Soft cinematic: gainScale 0.55, pitchGainScale 1.8, deadzone 0.08, maxRc 35 / maxPitchRc 50; roll = 0 |
 | **Spotlight** | Tripod: yaw + throttle only; pitch = 0, roll = 0 |
 | **Orbit** | Sticky gentle strafe roll (±25); yaw centers subject; light pitch for size; throttle for height. Re-tap Orbit to flip direction. Lost subject → hover + PID reset (strafe sign sticky) |
-| **Sport** | ~1.5x Chase: gainx2.025, pitchGain ~3.6, deadzone 0.022, maxRc/maxPitch ~85. `sendRc` clamps at `MAX_RC=100` |
+| **Sport** | Original 1x Sport: gainScale 1.35, pitchGainScale 2.4, deadzone 0.025, maxRc/maxPitchRc 70. `sendRc` clamps at `MAX_RC=100` |
 
 ### Distance lock + shoulder-width metric
 
@@ -45,7 +45,7 @@ Orthogonal to **Body/Face** detection ([FollowMode]). [FollowStyle] chips near F
 
 Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay labels: `CHASE` / `SPOT` / `ORBIT` / `SPORT`.
 
-**Fast** chip (next to style chips): unlocks manual stick soft-cap from +/-50 to +/-100 (SDK max). Does not affect follow auto RC. Tappable anytime.
+**Fast sticks** control (amber, on the Body / Follow row — not in the green style chip row): unlocks manual stick send-time soft-cap from +/-50 to +/-100 (SDK max). Stored stick values stay full +/-100 so toggling Fast mid-hold takes effect on the next RC tick. Does not affect follow auto RC. Tappable anytime.
 
 ## Safety disclaimer
 
@@ -123,7 +123,7 @@ FlightScreen        <-> Compose FPV chrome
 - **Body (default):** torso center from shoulders/hips; distance from **shoulder width / frame width** (locked at Follow ON; fallback target ~0.20).
 - **Face:** largest face bbox (~target 8% of frame area), same as v1.
 - PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs locked/default target (separate pitchGainScale); shaped by **FollowStyle** (Chase/Spot/Orbit/Sport).
-- Style soft-clamps outputs; `sendRc` caps at `MAX_RC=100` (SDK max). Manual sticks soft-capped at +/-50 in `onManualRc` (or +/-100 when **Fast** chip is on). Follow is gated by an explicit toggle.
+- Style soft-clamps outputs; `sendRc` caps at `MAX_RC=100` (SDK max). Manual sticks store full +/-100; soft (+/-50) vs **Fast sticks** (+/-100) cap applied at send time in the RC loop. Follow is gated by an explicit toggle.
 - Manual joysticks: left = throttle/yaw, right = pitch/roll; stick deflection >15 overrides the matching auto axis.
 - RC loop sends at **20 Hz** (`sendRc`); follow detection ~15 Hz.
 

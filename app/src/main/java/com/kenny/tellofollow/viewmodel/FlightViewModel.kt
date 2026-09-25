@@ -47,7 +47,7 @@ data class FlightUiState(
     val recordingWithAudio: Boolean = false,
     val statusMessage: String = "Join TELLO-xxxx Wi-Fi, then Connect",
     val lastPhotoOk: Boolean = false,
-    /** Manual stick soft-cap: false=+/-50, true=+/-100 (SDK max). */
+    /** Manual stick send-time soft-cap: false=+/-50, true=+/-100 (SDK max). */
     val fastSticks: Boolean = false,
 )
 
@@ -61,9 +61,9 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         private const val FOLLOW_HZ = 15L
         /** Stick / hover RC refresh. Tello expects continuous rc while flying. */
         private const val RC_PERIOD_MS = 50L
-        /** Manual joysticks soft-capped here; follow auto may use full style max up to SDK 100. */
+        /** Soft stick send-time cap when fastSticks is off. */
         private const val MANUAL_RC_SOFT_CAP = 50
-        /** Unlocked stick soft-cap when fastSticks is on (SDK max). */
+        /** Fast stick / store clamp (SDK max). Follow auto may use full style max up to this. */
         private const val MANUAL_RC_FAST_CAP = 100
     }
 
@@ -345,16 +345,30 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         throttle: Int? = null,
         yaw: Int? = null,
     ) {
-        // Only update desired sticks. The 20 Hz loop sends them - never await UDP here.
-        // Soft-cap sticks at +/-50 (default) or +/-100 when fastSticks; follow auto unchanged.
-        val cap = if (_ui.value.fastSticks) MANUAL_RC_FAST_CAP else MANUAL_RC_SOFT_CAP
-        fun stick(v: Int) = v.coerceIn(-cap, cap)
+        // Store full requested stick (JoystickPad.toRc is already +/-100). Soft vs Fast
+        // cap is applied at send time so toggling Fast mid-hold takes effect next tick.
+        fun stick(v: Int) = v.coerceIn(-MANUAL_RC_FAST_CAP, MANUAL_RC_FAST_CAP)
         val prev = _manualRc.value
         _manualRc.value = RcCommand(
             roll = stick(roll ?: prev.roll),
             pitch = stick(pitch ?: prev.pitch),
             throttle = stick(throttle ?: prev.throttle),
             yaw = stick(yaw ?: prev.yaw),
+        )
+    }
+
+    /** Current soft (+/-50) or Fast (+/-100) cap for manual sticks. */
+    private fun manualStickCap(): Int =
+        if (_ui.value.fastSticks) MANUAL_RC_FAST_CAP else MANUAL_RC_SOFT_CAP
+
+    /** Apply send-time Fast/soft cap to stored manual RC. */
+    private fun cappedManual(m: RcCommand): RcCommand {
+        val cap = manualStickCap()
+        return RcCommand(
+            roll = m.roll.coerceIn(-cap, cap),
+            pitch = m.pitch.coerceIn(-cap, cap),
+            throttle = m.throttle.coerceIn(-cap, cap),
+            yaw = m.yaw.coerceIn(-cap, cap),
         )
     }
 
@@ -429,7 +443,7 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         rcJob = viewModelScope.launch(Dispatchers.IO) {
             while (isActive && command.isConnected) {
                 if (!_ui.value.followEnabled) {
-                    val m = _manualRc.value
+                    val m = cappedManual(_manualRc.value)
                     command.sendRc(m.roll, m.pitch, m.throttle, m.yaw)
                 }
                 delay(RC_PERIOD_MS)
@@ -500,8 +514,9 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
                 SafetyAction.NONE -> Unit
             }
             val auto = pid.update(det, _ui.value.followStyle)
-            // Manual sticks override auto when deflected; ORBIT auto-roll used when stick near zero
-            val man = _manualRc.value
+            // Manual sticks override auto when deflected; ORBIT auto-roll used when stick near zero.
+            // Cap at send-time soft/Fast so stored +/-100 respects toggle.
+            val man = cappedManual(_manualRc.value)
             val cmd = RcCommand(
                 roll = if (kotlin.math.abs(man.roll) > 15) man.roll else auto.roll,
                 pitch = if (kotlin.math.abs(man.pitch) > 15) man.pitch else auto.pitch,
