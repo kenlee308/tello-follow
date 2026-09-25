@@ -9,7 +9,7 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 |--------------|---------|-------|
 | `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
 | `v2` / tag `v2.0.0` | 2.0.0 | Body/pose follow + mic mux on Record |
-| `v2.1` (current) | 2.1.1-dev | Follow styles: Chase / Spot / Orbit / Parallel / Sport + distance lock |
+| `v2.1` (current) | 2.1.2-dev | Follow styles: Chase / Spot / Orbit / Sport + distance lock (Parallel removed; Sport ~2x Chase; sendRc +/-100) |
 
 ---
 
@@ -27,15 +27,14 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 
 Orthogonal to **Body/Face** detection ([FollowMode]). [FollowStyle] chips near Follow (order):
 
-**Chase | Spot | Orbit | Parallel | Sport**
+**Chase | Spot | Orbit | Sport**
 
 | Style | RC behavior |
 |-------|-------------|
-| **Chase** (default) | Soft yaw/throttle (old cinematic: gain×0.55, deadzone 0.08, max ~35); **boosted pitch** for distance (pitchGain ~1.8, maxPitch ~50); roll = 0 |
+| **Chase** (default) | Former Sport pace: gain×1.35, pitchGain ~2.4, deadzone 0.025, maxRc/maxPitch ~70; roll = 0 |
 | **Spotlight** | Tripod: yaw + throttle only; pitch = 0, roll = 0 |
 | **Orbit** | Sticky gentle strafe roll (±25); yaw centers subject; light pitch for size; throttle for height. Re-tap Orbit to flip direction. Lost subject → hover + PID reset (strafe sign sticky) |
-| **Parallel** | Side-track: sticky lateral strafe (±24) while yaw centers and throttle frames; **light** pitch holds locked distance (not aggressive forward chase). Re-tap Parallel to flip strafe. Lost → hover + PID reset; strafe sign sticky. Distinct from Orbit (beside subject on a lateral path, not circling) |
-| **Sport** | Snappier yaw/throttle (gain×1.35); **aggressive pitch** (pitchGain ~2.4) so distance snaps to MAX_RC sooner; soft max ~70 then send-capped at `MAX_RC=50` |
+| **Sport** | ~2× Chase: gain×2.7, pitchGain ~4.8, deadzone 0.02, maxRc/maxPitch ~100 (full SDK). sendRc clamps at `MAX_RC=100` |
 
 ### Distance lock + shoulder-width metric
 
@@ -44,7 +43,7 @@ Orthogonal to **Body/Face** detection ([FollowMode]). [FollowStyle] chips near F
 - **FACE** distance proxy = face box area (unchanged).
 - Unlocked fallback targets: body ~0.20 shoulder-frac, face ~0.08 area.
 
-Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay labels: `CHASE` / `SPOT` / `ORBIT` / `PARA` / `SPORT`.
+Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay labels: `CHASE` / `SPOT` / `ORBIT` / `SPORT`.
 
 ## Safety disclaimer
 
@@ -121,8 +120,8 @@ FlightScreen        <-> Compose FPV chrome
 
 - **Body (default):** torso center from shoulders/hips; distance from **shoulder width / frame width** (locked at Follow ON; fallback target ~0.20).
 - **Face:** largest face bbox (~target 8% of frame area), same as v1.
-- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs locked/default target (separate pitchGainScale); shaped by **FollowStyle** (Chase/Spot/Orbit/Parallel/Sport).
-- Style soft-clamps outputs; `sendRc` still caps at `MAX_RC=50`. Follow is gated by an explicit toggle.
+- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs locked/default target (separate pitchGainScale); shaped by **FollowStyle** (Chase/Spot/Orbit/Sport).
+- Style soft-clamps outputs; `sendRc` caps at `MAX_RC=100` (SDK max). Manual sticks soft-capped at +/-50 in `onManualRc`. Follow is gated by an explicit toggle.
 - Manual joysticks: left = throttle/yaw, right = pitch/roll; stick deflection >15 overrides the matching auto axis.
 - RC loop sends at **20 Hz** (`sendRc`); follow detection ~15 Hz.
 

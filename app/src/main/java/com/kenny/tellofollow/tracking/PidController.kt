@@ -1,19 +1,19 @@
 package com.kenny.tellofollow.tracking
 
 /**
- * Three independent PIDs mapping subject bbox error to Tello 
-c axes,
+ * Three independent PIDs mapping subject bbox error to Tello rc axes,
  * shaped by [FollowStyle] (flight personality — distinct from [FollowMode] body/face).
  *
  * Mapping (standard Tello rc a b c d):
  * - **yaw (d)** <- horizontal center error
  * - **throttle (c)** <- vertical center error (inverted: below center => climb)
  * - **pitch (b)** <- size error vs locked/default target (too small => fly forward);
- *   forced 0 in SPOTLIGHT; light in PARALLEL
- * - **roll (a)** 0 in CHASE/SPOTLIGHT/SPORT; sticky strafe in ORBIT/PARALLEL
+ *   forced 0 in SPOTLIGHT
+ * - **roll (a)** 0 in CHASE/SPOTLIGHT/SPORT; sticky strafe in ORBIT
  *
  * Distance: [lockedTargetSize] when set (snapshot at Follow ON), else face/body defaults.
- * Style outputs are soft-clamped here; [TelloCommandClient.MAX_RC] (=50) still caps on send.
+ * Style outputs are soft-clamped here; [TelloCommandClient.MAX_RC] (=100, SDK max) caps on send.
+ * Manual sticks are soft-capped at +/-50 in FlightViewModel.onManualRc.
  */
 data class RcCommand(
     val roll: Int = 0,
@@ -30,15 +30,13 @@ data class RcCommand(
  * Flight-style follow modes (v2.1). Orthogonal to [FollowMode] (BODY vs FACE detection).
  */
 enum class FollowStyle {
-    /** Soft yaw/throttle (old cinematic feel) + boosted pitch for distance. */
+    /** Former Sport pace: snappy yaw/throttle + aggressive pitch for distance. */
     CHASE,
     /** Tripod tracking: hover translation; yaw + throttle only. */
     SPOTLIGHT,
     /** Circle: sticky strafe roll while yaw keeps subject centered. */
     ORBIT,
-    /** Side-track: sticky lateral strafe; yaw centers; light pitch for locked distance. */
-    PARALLEL,
-    /** Snappier: higher gains; pitch especially aggressive (send still MAX_RC=50). */
+    /** ~2x Chase: highest gains; pitch especially aggressive (send up to MAX_RC=100). */
     SPORT,
 }
 
@@ -55,7 +53,7 @@ class PidController(
     var followEnabled: Boolean = false
 
     /**
-     * Sticky strafe sign for ORBIT / PARALLEL: +1 = right, -1 = left.
+     * Sticky strafe sign for ORBIT: +1 = right, -1 = left.
      * Survives brief detection loss and PID reset.
      */
     @Volatile
@@ -76,7 +74,7 @@ class PidController(
         // Keep strafeRollSign and lockedTargetSize across brief loss / reset.
     }
 
-    /** Flip ORBIT / PARALLEL strafe direction (call from UI when re-tapping style). */
+    /** Flip ORBIT strafe direction (call from UI when re-tapping Orbit). */
     fun flipOrbitDirection() {
         strafeRollSign = if (strafeRollSign >= 0) -1 else 1
     }
@@ -147,14 +145,6 @@ class PidController(
                 roll = strafeRollSign * ORBIT_ROLL_MAG
                 // Light pitch already via pitchGainScale in styleConfig
             }
-            FollowStyle.PARALLEL -> {
-                // Side-track: keep sticky strafe even when subject drifts;
-                // yaw still works hard to re-center. Blend: never kill roll entirely.
-                val absX = kotlin.math.abs(detection.centerX - 0.5f)
-                val rollScale = if (absX > 0.22f) 0.65f else 1f
-                roll = (strafeRollSign * PARALLEL_ROLL_MAG * rollScale).toInt()
-                // pitchGainScale already light — maintain locked distance, not chase-forward
-            }
             FollowStyle.CHASE, FollowStyle.SPORT -> {
                 roll = 0
             }
@@ -184,13 +174,13 @@ class PidController(
     )
 
     private fun styleConfig(style: FollowStyle): StyleConfig = when (style) {
-        // Soft yaw/throttle like old CINEMATIC; pitch ~1.8× cinematic base (0.55 → ~1.0 effective vs old chase)
+        // Former Sport pace (v2.1.1); sendRc now allows full style max up to SDK +/-100
         FollowStyle.CHASE -> StyleConfig(
-            gainScale = 0.55f,
-            pitchGainScale = 1.8f,
-            deadzone = 0.08f,
-            maxRc = 35,
-            maxPitchRc = 50,
+            gainScale = 1.35f,
+            pitchGainScale = 2.4f,
+            deadzone = 0.025f,
+            maxRc = 70,
+            maxPitchRc = 70,
         )
         FollowStyle.SPOTLIGHT -> StyleConfig(
             gainScale = 1.0f,
@@ -206,29 +196,19 @@ class PidController(
             maxRc = 50,
             maxPitchRc = 40,
         )
-        // Strafe-dominant side follow; light pitch for locked distance only
-        FollowStyle.PARALLEL -> StyleConfig(
-            gainScale = 1.0f,
-            pitchGainScale = 0.70f,
-            deadzone = baseDeadzone,
-            maxRc = 50,
-            maxPitchRc = 35,
-        )
-        // Snappy overall; pitch ~2.4× old chase base so it hits MAX_RC sooner
+        // ~2x Chase gains / pitch aggression; uses full SDK RC range
         FollowStyle.SPORT -> StyleConfig(
-            gainScale = 1.35f,
-            pitchGainScale = 2.4f,
-            deadzone = 0.025f,
-            maxRc = 70,
-            maxPitchRc = 70,
+            gainScale = 2.7f,
+            pitchGainScale = 4.8f,
+            deadzone = 0.02f,
+            maxRc = 100,
+            maxPitchRc = 100,
         )
     }
 
     companion object {
-        /** Gentle constant strafe magnitude for ORBIT (within MAX_RC soft cap). */
+        /** Gentle constant strafe magnitude for ORBIT (within style maxRc soft cap). */
         const val ORBIT_ROLL_MAG = 25
-        /** Slightly stronger lateral for PARALLEL side-track. */
-        const val PARALLEL_ROLL_MAG = 24
     }
 }
 

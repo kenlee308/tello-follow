@@ -12,8 +12,8 @@ android {
         applicationId = "com.kenny.tellofollow"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.1.1-dev"
+        versionCode = 5
+        versionName = "2.1.2-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

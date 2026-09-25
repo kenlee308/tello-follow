@@ -34,7 +34,7 @@ class TelloCommandClient {
         private const val REPLY_TIMEOUT_MS = 5_000
         private const val BUF_SIZE = 1024
         private const val CONNECT_ATTEMPTS = 8
-        const val MAX_RC = 50
+        const val MAX_RC = 100
     }
 
     private val cmdMutex = Mutex()
@@ -134,7 +134,7 @@ class TelloCommandClient {
         }
     }
 
-    /** Fire-and-forget. a=roll b=pitch c=throttle d=yaw. Soft-capped to MAX_RC. */
+    /** Fire-and-forget. a=roll b=pitch c=throttle d=yaw. Soft-capped to MAX_RC (SDK +/-100). */
     fun sendRc(a: Int, b: Int, c: Int, d: Int) {
         val s = rcSocket ?: return
         val addr = telloAddress ?: return

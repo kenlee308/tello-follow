@@ -59,6 +59,8 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         private const val FOLLOW_HZ = 15L
         /** Stick / hover RC refresh. Tello expects continuous rc while flying. */
         private const val RC_PERIOD_MS = 50L
+        /** Manual joysticks soft-capped here; follow auto may use full style max up to SDK 100. */
+        private const val MANUAL_RC_SOFT_CAP = 50
     }
 
     private val command = TelloCommandClient()
@@ -304,11 +306,9 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setFollowStyle(style: FollowStyle) {
-        // Re-tapping Orbit or Parallel flips sticky strafe direction
+        // Re-tapping Orbit flips sticky strafe direction
         val cur = _ui.value.followStyle
         if (style == FollowStyle.ORBIT && cur == FollowStyle.ORBIT) {
-            pid.flipStrafeDirection()
-        } else if (style == FollowStyle.PARALLEL && cur == FollowStyle.PARALLEL) {
             pid.flipStrafeDirection()
         }
         _ui.value = _ui.value.copy(followStyle = style)
@@ -331,12 +331,14 @@ class FlightViewModel(app: Application) : AndroidViewModel(app) {
         yaw: Int? = null,
     ) {
         // Only update desired sticks. The 20 Hz loop sends them - never await UDP here.
+        // Soft-cap sticks at +/-50 so feel stays the same after sendRc raised to SDK +/-100.
+        fun stick(v: Int) = v.coerceIn(-MANUAL_RC_SOFT_CAP, MANUAL_RC_SOFT_CAP)
         val prev = _manualRc.value
         _manualRc.value = RcCommand(
-            roll = roll ?: prev.roll,
-            pitch = pitch ?: prev.pitch,
-            throttle = throttle ?: prev.throttle,
-            yaw = yaw ?: prev.yaw,
+            roll = stick(roll ?: prev.roll),
+            pitch = stick(pitch ?: prev.pitch),
+            throttle = stick(throttle ?: prev.throttle),
+            yaw = stick(yaw ?: prev.yaw),
         )
     }
 
