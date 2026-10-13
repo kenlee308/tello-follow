@@ -1,18 +1,86 @@
 # TelloFollow
 
-Android follow-me app for the **standard DJI Tello** (not EDU). Streams the drone’s H.264 video, detects the largest face with **ML Kit Face Detection** (fast / stream-oriented), and steers with a simple PID on `rc` axes. Photos and MP4 video are saved to MediaStore.
+Android follow-me app for the **standard DJI Tello** (not EDU). Streams the drone's H.264 video, tracks a person with **ML Kit Pose Detection** (body / torso; face fallback), and steers with a simple PID on `rc` axes. Photos and MP4 video (optional phone mic) are saved to MediaStore.
 
 **Package:** `com.kenny.tellofollow`  
 **Stack:** Kotlin, Jetpack Compose, minSdk 26, targetSdk / compileSdk 35
 
+![Demo GIF coming soon](docs/demo-placeholder.gif)
+*Demo GIF coming soon.*
+
+> **Branches:** `main` is the stable v1 (face tracking). The latest work (pose tracking, follow flight styles, Fast sticks) lives on the **`v2.1`** branch; `v2` is the intermediate release. Release tags mark each version.
+
+## At a glance
+
+**What it is:** an Android app that turns a standard DJI Tello into a follow-me camera drone, with all tracking done on the phone.
+
+**Features**
+- Live H.264 video from the Tello, decoded on the phone
+- On-device person tracking with ML Kit (pose/torso on v2.x, face on v1)
+- PID steering on the `rc` axes, with an explicit Follow toggle
+- Follow flight styles and distance lock (v2.1)
+- On-screen manual sticks, with an optional Fast sticks mode (v2.1)
+- Photo and MP4 capture saved to the phone's gallery (optional mic)
+
+**Hardware**
+- DJI Tello (standard, not EDU)
+- An Android phone (Android 8.0 / API 26+, mid-range or better), connected to the Tello's Wi-Fi
+
+**Build**
+1. Install Android Studio with Android SDK 35.
+2. Copy `local.properties.example` to `local.properties` and set your SDK path.
+3. Open the project, sync Gradle, and run on a physical phone (`./gradlew assembleDebug` also works from the CLI).
+4. Join the Tello's Wi-Fi and launch the app. APKs are not committed; build your own.
+
+
+| Branch / tag | Version | Notes |
+|--------------|---------|-------|
+| `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
+| `v2` / tag `v2.0.0` | 2.0.0 | Body/pose follow + mic mux on Record |
+| `v2.1` / tag `v2.1.5` | **2.1.5** | Follow styles Chase/Spot/Orbit/Sport; Fast sticks Soft+/-50 / Fast+/-100 full-range scale; distance lock; body/face; phone mic record. APK: `dist/TelloFollow-v2.1.5.apk` |
+
 ---
+
+## v2-dev features
+
+- **Body follow:** ML Kit Pose Detection (`pose-detection:18.0.0-beta5`, STREAM_MODE). Follow target = torso center (shoulder+hip midpoint); bbox from landmark extents. Face Detection remains as fallback when pose misses, or via the **Body/Face** mode chip (default **Body**). Overlay draws skeleton + body box.
+- **Mic on Record:** `RECORD_AUDIO` requested when you tap Record. AAC from the phone mic is muxed into the MP4 alongside re-encoded H.264. If permission is denied or audio setup fails, recording continues **video-only** with a status message. Tello's stream itself has no audio.
+
+---
+
+
+---
+
+## v2.1-dev follow flight styles
+
+Orthogonal to **Body/Face** detection ([FollowMode]). [FollowStyle] chips near Follow (order):
+
+**Chase | Spot | Orbit | Sport**
+
+| Style | RC behavior |
+|-------|-------------|
+| **Chase** (default) | Soft cinematic: gainScale 0.55, pitchGainScale 1.8, deadzone 0.08, maxRc 35 / maxPitchRc 50; roll = 0 |
+| **Spotlight** | Tripod: yaw + throttle only; pitch = 0, roll = 0 |
+| **Orbit** | Sticky gentle strafe roll (±25); yaw centers subject; light pitch for size; throttle for height. Re-tap Orbit to flip direction. Lost subject → hover + PID reset (strafe sign sticky) |
+| **Sport** | Original 1x Sport: gainScale 1.35, pitchGainScale 2.4, deadzone 0.025, maxRc/maxPitchRc 70. `sendRc` clamps at `MAX_RC=100` |
+
+### Distance lock + shoulder-width metric
+
+- On **Follow ON** (or first good detection while follow is on), PID snapshots `lockedTargetSize` from the detection distance proxy and holds that range until Follow OFF.
+- **BODY** distance proxy = normalized **shoulder width** / frame width (stable when hips/legs are cropped / only upper body visible). Both shoulders still required; hips optional.
+- **FACE** distance proxy = face box area (unchanged).
+- Unlocked fallback targets: body ~0.20 shoulder-frac, face ~0.08 area.
+
+Styles are selectable anytime; they only drive the drone while **Follow ON**. Overlay labels: `CHASE` / `SPOT` / `ORBIT` / `SPORT`.
+
+**Fast sticks** control (amber, on the Body / Follow row — not in the green style chip row): unlocks manual stick send-time soft-cap from +/-50 to +/-100 (SDK max). Stored stick values stay full +/-100 so toggling Fast mid-hold takes effect on the next RC tick. Does not affect follow auto RC. Tappable anytime.
 
 ## Safety disclaimer
 
-- Tello has **no GPS**. Wind, Wi‑Fi dropouts, and vision errors can cause unexpected motion or falls.
+- Tello has **no GPS**. Wind, Wi-Fi dropouts, and vision errors can cause unexpected motion or falls.
 - Fly outdoors or in a large clear indoor space, **away from people, pets, glass, and obstacles**.
 - Keep visual line of sight. Be ready to hit **EMERGENCY** (motors off) or **Land**.
-- Low battery auto-land and “lost face → hover” are helpers, **not** a guarantee of safety.
+- Low battery auto-land and "lost subject -> hover" are helpers, **not** a guarantee of safety.
 - **You assume all risk.** This is a hobby / research scaffold, not a certified product.
 
 ---
@@ -21,22 +89,30 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 
 1. **Android Studio** (Ladybug / Koala or newer recommended) with Android SDK 35 and a device or emulator.
 2. A charged **DJI Tello** (standard).
-3. An Android phone (mid-range or better). Emulator **cannot** talk to a real Tello Wi‑Fi AP usefully for flight — use a physical device.
-4. Optional: reading glasses / prop guards if you value your furniture.
+3. An Android phone (mid-range or better). Emulator **cannot** talk to a real Tello Wi-Fi AP usefully for flight — use a physical device.
+4. Optional: JDK 21 for CLI builds (`JAVA_HOME` pointing at a JetBrains/Android Studio JBR 21 works).
 
 ---
 
 ## How to open and run
 
 1. Clone or copy this folder to your machine.
-2. Open **Android Studio → Open →** select the `tello-follow` directory (the one with `settings.gradle.kts`).
-3. Let Gradle sync. If the wrapper JAR is missing, Studio will offer to use its embedded Gradle — accept, or run **File → New → Import** and let it generate the wrapper.
-4. Connect a phone via USB (enable developer options + USB debugging), or use wireless debugging.
-5. On the phone: connect Wi‑Fi to the Tello SSID (`TELLO-xxxx`). The phone will lose normal internet; that is expected.
-6. Run the **app** configuration. Landscape FPV UI should appear.
-7. Tap **Connect** → wait for “Connected + stream” → **Takeoff** → optionally **Follow ON**.
+2. Open **Android Studio -> Open ->** select the `tello-follow` directory (the one with `settings.gradle.kts`).
+3. Check out branch **`v2.1`** / tag **`v2.1.5`** for follow styles (`git checkout v2.1.5`), **`v2`** / tag `v2.0.0` for body follow + mic, or **`main`** / tag `v1.0.0` for face-only.
+4. Let Gradle sync. If the wrapper JAR is missing, Studio will offer to use its embedded Gradle — accept, or run **File -> New -> Import** and let it generate the wrapper.
+5. Connect a phone via USB (enable developer options + USB debugging), or use wireless debugging.
+6. On the phone: connect Wi-Fi to the Tello SSID (`TELLO-xxxx`). The phone will lose normal internet; that is expected.
+7. Run the **app** configuration. Landscape FPV UI should appear.
+8. Tap **Connect** -> wait for "Connected + stream" -> **Takeoff** -> optionally **Follow ON** (Body mode by default). Tap **Record** and allow the mic if you want audio on the clip.
 
-If sync fails on first open: **File → Sync Project with Gradle Files**. Distribution is pinned to Gradle **8.9** in `gradle/wrapper/gradle-wrapper.properties`.
+CLI (optional, JDK 21):
+
+```text
+set JAVA_HOME=C:\Users\apsis\.jdks\jbr-21.0.11
+gradlew.bat assembleDebug
+```
+
+If sync fails on first open: **File -> Sync Project with Gradle Files**. Distribution is pinned to Gradle **8.9** in `gradle/wrapper/gradle-wrapper.properties`.
 
 ---
 
@@ -44,44 +120,45 @@ If sync fails on first open: **File → Sync Project with Gradle Files**. Distri
 
 | Channel | Address | Role |
 |--------|---------|------|
-| Commands | `192.168.10.1:8889` UDP | Text SDK (`command`, `takeoff`, `rc`, …) |
-| State | `*:8890` UDP | Telemetry (`bat`, `h`, `yaw`, …) |
+| Commands | `192.168.10.1:8889` UDP | Text SDK (`command`, `takeoff`, `rc`, ...) |
+| State | `*:8890` UDP | Telemetry (`bat`, `h`, `yaw`, ...) |
 | Video | `*:11111` UDP | H.264 chunks (1460-byte packets; short packet = EOF frame) |
 
-Keep-alive: the client periodically sends `rc 0 0 0 0` so the drone’s ~15s idle timeout does not auto-land.
+Keep-alive: the client periodically sends `rc 0 0 0 0` so the drone's ~15s idle timeout does not auto-land.
 
 ---
 
 ## Architecture
 
 ```
-Wi‑Fi AP (TELLO)
-    │
-    ├── TelloCommandClient   → takeoff / land / rc / streamon
-    ├── TelloStateListener   → StateFlow<TelloTelemetry>
-    └── TelloVideoReceiver   → frame assembly → H264Decoder
-                                    │
-                                    └── ImageReader → Bitmap
-                                          ├── Compose Image preview
-                                          ├── PersonDetector (ML Kit face)
-                                              → PidController → rc
-                                              → PhotoCapture / VideoRecorder
-FlightSafetyMonitor ← battery, lost face, disconnect
-FlightViewModel     ← wires UI + loops
-FlightScreen        ← Compose FPV chrome
+Wi-Fi AP (TELLO)
+    |
+    +-- TelloCommandClient   -> takeoff / land / rc / streamon
+    +-- TelloStateListener   -> StateFlow<TelloTelemetry>
+    +-- TelloVideoReceiver   -> frame assembly -> H264Decoder (Surface)
+                                    |
+                                    +-- PixelCopy Bitmap
+                                          +-- PersonDetector (pose + face fallback)
+                                              -> PidController -> rc
+                                          +-- PhotoCapture / VideoRecorder (+ optional AAC mic)
+FlightSafetyMonitor <-> battery, lost subject, disconnect
+FlightViewModel     <-> wires UI + loops
+FlightScreen        <-> Compose FPV chrome
 ```
 
 ### Follow control
 
-- Largest face bbox → normalized center `(cx, cy)` and relative size.
-- PID: **yaw** ← x error, **throttle** ← y error (inverted), **pitch** ← size vs target (~8% of frame).
-- Outputs clamped to `-100..100`. Follow is gated by an explicit toggle.
+- **Body (default):** torso center from shoulders/hips; distance from **shoulder width / frame width** (locked at Follow ON; fallback target ~0.20).
+- **Face:** largest face bbox (~target 8% of frame area), same as v1.
+- PID: **yaw** <- x error, **throttle** <- y error (inverted), **pitch** <- size vs locked/default target (separate pitchGainScale); shaped by **FollowStyle** (Chase/Spot/Orbit/Sport).
+- Style soft-clamps outputs; `sendRc` caps at `MAX_RC=100` (SDK max). Manual sticks store full +/-100; soft (+/-50) vs **Fast sticks** (+/-100) cap applied at send time in the RC loop. Follow is gated by an explicit toggle.
 - Manual joysticks: left = throttle/yaw, right = pitch/roll; stick deflection >15 overrides the matching auto axis.
+- RC loop sends at **20 Hz** (`sendRc`); follow detection ~15 Hz.
 
 ### Media
 
-- **Photo:** latest decoded `Bitmap` → JPEG in `Pictures/TelloFollow` (MediaStore).
-- **Video:** MVP **re-encodes** bitmaps to H.264 MP4 via MediaCodec + MediaMuxer (`Movies/TelloFollow`). Remuxing raw Tello NALs is lower-CPU but brittle across firmware; deferred.
+- **Photo:** latest PixelCopy `Bitmap` -> JPEG in `Pictures/TelloFollow` (MediaStore).
+- **Video:** re-encodes bitmaps to H.264 MP4 via MediaCodec + MediaMuxer (`Movies/TelloFollow`), optionally muxing phone mic AAC on a second track with aligned `presentationTimeUs`.
 
 ---
 
@@ -93,11 +170,9 @@ See the tree under `app/src/main/java/com/kenny/tellofollow/` — packages `tell
 
 ## Build notes / caveats
 
-- Video decode uses **ImageReader → Bitmap** so ML Kit and photo share frames. Compose shows that bitmap as FPV preview. Direct SurfaceView output is stubbed for a future GL dual-output path (MediaCodec allows only one output Surface).
-- This repository may be developed on a Linux box **without** the Android SDK. Source is written to compile conceptually in Android Studio; do not expect `./gradlew assembleDebug` to succeed until the SDK and wrapper JAR are present.
-- `gradle/wrapper/gradle-wrapper.properties` is included; the binary `gradle-wrapper.jar` is **not** (Studio regenerates it on sync).
-- ML Kit Face Detection downloads a model on first run — needs a one-time network path (e.g. sync deps on wifi before joining Tello AP, or pre-install).
-- YUV→Bitmap in the decoder is a pragmatic JPEG round-trip for MVP CV/photo quality, not broadcast color science.
+- Video decode is **Surface-only** H.264. Bitmaps for CV / photo / record come from **PixelCopy** on the live SurfaceView (not ImageReader).
+- ML Kit Face + Pose models download on first run — needs a one-time network path (sync deps on normal Wi-Fi before joining Tello AP, or pre-install).
+- Do not break: flight RC soft cap, 20 Hz sendRc, Land-when-connected, Connect/Wi-Fi binder.
 
 ---
 
