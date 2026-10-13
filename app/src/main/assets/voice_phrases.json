@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "intents": [
+    { "intent": "TAKEOFF", "phrases": ["take off", "takeoff", "launch", "lift off", "go up"], "reply": "Taking off", "requiresFlying": false },
+    { "intent": "LAND", "phrases": ["land", "land now", "come down", "touch down", "landing"], "reply": "Landing", "requiresFlying": true },
+    { "intent": "STOP", "phrases": ["stop", "stay", "hold", "freeze", "wait", "hover", "enough"], "reply": "Holding", "requiresFlying": true },
+    { "intent": "FOLLOW", "phrases": ["follow me", "follow", "lets go", "come with me", "track me"], "reply": "Following", "requiresFlying": true },
+    { "intent": "PHOTO", "phrases": ["take a photo", "take a picture", "photo", "picture", "snap", "say cheese", "cheese"], "reply": "Cheese", "requiresFlying": false },
+    { "intent": "RECORD", "phrases": ["start recording", "stop recording", "record", "record video"], "reply": "Recording", "requiresFlying": false },
+    { "intent": "CLOSER", "phrases": ["come here", "come closer", "closer", "get closer"], "reply": "Coming", "requiresFlying": true }
+  ]
+}

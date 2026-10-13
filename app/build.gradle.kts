@@ -12,8 +12,9 @@ android {
         applicationId = "com.kenny.tellofollow"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "2.1.5"
+        applicationIdSuffix = ".v3" // installs beside v2.1.5 (debug + release)
+        versionCode = 9
+        versionName = "3.0.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -70,6 +71,9 @@ dependencies {
 
     // ML Kit Pose Detection (fast / STREAM_MODE) for body follow-me
     implementation("com.google.mlkit:pose-detection:18.0.0-beta5")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303") // real org.json for JVM unit tests
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

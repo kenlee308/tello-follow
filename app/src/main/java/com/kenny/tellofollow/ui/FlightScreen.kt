@@ -41,11 +41,16 @@ import com.kenny.tellofollow.safety.SafetyLevel
 import com.kenny.tellofollow.tracking.FollowMode
 import com.kenny.tellofollow.tracking.FollowStyle
 import com.kenny.tellofollow.viewmodel.FlightViewModel
+import com.kenny.tellofollow.voice.VoiceUiState
 
 @Composable
 fun FlightScreen(
     viewModel: FlightViewModel,
     onRecordClick: () -> Unit = { viewModel.toggleRecord() },
+    voiceState: VoiceUiState = VoiceUiState(),
+    voiceDryRun: Boolean = true,
+    onMicPress: () -> Unit = {},
+    onMicRelease: () -> Unit = {},
 ) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
     val telemetry by viewModel.telemetry.collectAsStateWithLifecycle()
@@ -66,6 +71,20 @@ fun FlightScreen(
             followEnabled = ui.followEnabled,
             followStyle = ui.followStyle,
             modifier = Modifier.fillMaxSize(),
+        )
+
+        // v3 voice caption (below telemetry bar) + hold-to-talk mic
+        VoiceCaption(
+            state = voiceState,
+            dryRun = voiceDryRun,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 64.dp),
+        )
+        PushToTalkButton(
+            listening = voiceState.listening,
+            available = voiceState.available,
+            onPress = onMicPress,
+            onRelease = onMicRelease,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 32.dp),
         )
 
         // Top telemetry bar
