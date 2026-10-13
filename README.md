@@ -5,6 +5,34 @@ Android follow-me app for the **standard DJI Tello** (not EDU). Streams the dron
 **Package:** `com.kenny.tellofollow`  
 **Stack:** Kotlin, Jetpack Compose, minSdk 26, targetSdk / compileSdk 35
 
+![Demo GIF coming soon](docs/demo-placeholder.gif)
+*Demo GIF coming soon.*
+
+> **Branches:** `main` is the stable v1 (face tracking). The latest work (pose tracking, follow flight styles, Fast sticks) lives on the **`v2.1`** branch; `v2` is the intermediate release. Release tags mark each version.
+
+## At a glance
+
+**What it is:** an Android app that turns a standard DJI Tello into a follow-me camera drone, with all tracking done on the phone.
+
+**Features**
+- Live H.264 video from the Tello, decoded on the phone
+- On-device person tracking with ML Kit (pose/torso on v2.x, face on v1)
+- PID steering on the `rc` axes, with an explicit Follow toggle
+- Follow flight styles and distance lock (v2.1)
+- On-screen manual sticks, with an optional Fast sticks mode (v2.1)
+- Photo and MP4 capture saved to the phone's gallery (optional mic)
+
+**Hardware**
+- DJI Tello (standard, not EDU)
+- An Android phone (Android 8.0 / API 26+, mid-range or better), connected to the Tello's Wi-Fi
+
+**Build**
+1. Install Android Studio with Android SDK 35.
+2. Copy `local.properties.example` to `local.properties` and set your SDK path.
+3. Open the project, sync Gradle, and run on a physical phone (`./gradlew assembleDebug` also works from the CLI).
+4. Join the Tello's Wi-Fi and launch the app. APKs are not committed; build your own.
+
+
 | Branch / tag | Version | Notes |
 |--------------|---------|-------|
 | `main` / tag `v1.0.0` | 1.0.0 | Face follow, silent video record |
